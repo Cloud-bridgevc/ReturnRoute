@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@theme {
+  --color-navy-950: #050d19;
+  --color-navy-900: #0a1a2f;
+  --color-navy-800: #102742;
+  --color-navy-700: #1a3658;
+  --color-navy-600: #2a4a72;
+  --color-navy-300: #9fb3cc;
+  --color-teal-300: #5eead4;
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
+  --color-teal-600: #0d9488;
+  --color-signal-500: #f97316;
+  --color-signal-400: #fb923c;
+  --color-signal-100: #ffedd5;
+  --color-signal-700: #c2410c;
+}
+
+body {
+  background: #ffffff;
+  color: #0a1a2f;
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(94, 234, 212, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(94, 234, 212, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@keyframes route-dash {
+  to { stroke-dashoffset: -24; }
+}
+.route-flow {
+  stroke-dasharray: 6 6;
+  animation: route-dash 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-flow { animation: none; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-teal-500);
+  outline-offset: 2px;
+}

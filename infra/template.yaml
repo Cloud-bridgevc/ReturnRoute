@@ -1,0 +1,342 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ReturnRoute — returns processing & recovery platform.
+  S3 (images/documents), Amazon Bedrock (classification & summaries),
+  Amazon RDS for PostgreSQL (returns & inventory), AWS Lambda + EventBridge (workflows).
+  The WMS adapter is SIMULATED (WMS_MODE=simulated); no real warehouse system is called.
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two private subnets with NAT or VPC endpoints (Bedrock, S3, Secrets Manager, EventBridge)
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-opus-5-5
+  AiMode:
+    Type: String
+    Default: bedrock
+    AllowedValues: [bedrock, simulated]
+  CognitoIssuerUrl:
+    Type: String
+    Description: Cognito user pool issuer URL for the staff JWT authoriser
+  CognitoAudience:
+    Type: String
+  AllowedOrigin:
+    Type: String
+    Default: https://app.returnroute.example
+
+Conditions:
+  IsProd: !Equals [!Ref Stage, prod]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 512
+    Timeout: 60
+    Tracing: Active
+    VpcConfig:
+      SecurityGroupIds: [!Ref LambdaSecurityGroup]
+      SubnetIds: !Ref PrivateSubnetIds
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        DB_HOST: !GetAtt Database.Endpoint.Address
+        DB_PORT: !GetAtt Database.Endpoint.Port
+        DB_NAME: returnroute
+        DB_SECRET_ARN: !GetAtt Database.MasterUserSecret.SecretArn
+        EVENT_BUS_NAME: !Ref EventBus
+        RETURNROUTE_AI_MODE: !Ref AiMode
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        MEDIA_BUCKET: !Ref MediaBucket
+        WMS_MODE: simulated
+        NODE_OPTIONS: --enable-source-maps
+
+Resources:
+  # ── Storage ────────────────────────────────────────────────────────────────
+  MediaKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: ReturnRoute inspection media
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub returnroute-media-${Stage}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: aws:kms, KMSMasterKeyID: !Ref MediaKey }
+            BucketKeyEnabled: true
+      VersioningConfiguration: { Status: Enabled }
+      LifecycleConfiguration:
+        Rules:
+          - Id: retain-13-months
+            Status: Enabled
+            ExpirationInDays: 400
+            NoncurrentVersionExpiration: { NoncurrentDays: 30 }
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [PUT]
+            AllowedOrigins: [!Ref AllowedOrigin]
+            AllowedHeaders: ["content-type"]
+            MaxAge: 300
+
+  MediaBucketTlsOnly:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource: [!GetAtt MediaBucket.Arn, !Sub "${MediaBucket.Arn}/*"]
+            Condition: { Bool: { aws:SecureTransport: false } }
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ReturnRoute Lambda functions
+      VpcId: !Ref VpcId
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ReturnRoute PostgreSQL
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: ReturnRoute private subnets
+      SubnetIds: !Ref PrivateSubnetIds
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: postgres
+      EngineVersion: "17.11"
+      DBInstanceClass: !If [IsProd, db.r7g.large, db.t4g.medium]
+      AllocatedStorage: "50"
+      StorageType: gp3
+      StorageEncrypted: true
+      MultiAZ: !If [IsProd, true, false]
+      DBName: returnroute
+      MasterUsername: returnroute_admin
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: !If [IsProd, 14, 3]
+      DeletionProtection: !If [IsProd, true, false]
+      EnablePerformanceInsights: true
+      CopyTagsToSnapshot: true
+
+  # ── Workflow events ────────────────────────────────────────────────────────
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub returnroute-${Stage}
+
+  WorkflowDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      KmsMasterKeyId: alias/aws/sqs
+
+  # ── Functions ──────────────────────────────────────────────────────────────
+  ClassifyReasonFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: classify-reason.handler
+      Policies: [!Ref BedrockInvokePolicy, !Ref DbSecretReadPolicy]
+      Events:
+        ReturnLogged:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern: { source: [returnroute.workflow], detail-type: [ReturnLogged] }
+            DeadLetterConfig: { Arn: !GetAtt WorkflowDLQ.Arn }
+            RetryPolicy: { MaximumRetryAttempts: 3 }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/classify-reason.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true, External: ["pg-native"] }
+
+  AssessConditionFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: assess-condition.handler
+      Timeout: 120
+      Policies:
+        - !Ref BedrockInvokePolicy
+        - !Ref DbSecretReadPolicy
+        - S3ReadPolicy: { BucketName: !Ref MediaBucket }
+        - Statement: [{ Effect: Allow, Action: [kms:Decrypt], Resource: !GetAtt MediaKey.Arn }]
+      Events:
+        InspectionSubmitted:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern: { source: [returnroute.workflow], detail-type: [InspectionSubmitted] }
+            DeadLetterConfig: { Arn: !GetAtt WorkflowDLQ.Arn }
+            RetryPolicy: { MaximumRetryAttempts: 3 }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/assess-condition.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true, External: ["pg-native"] }
+
+  RecommendRouteFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: recommend-route.handler
+      Policies: [!Ref DbSecretReadPolicy]
+      Events:
+        ConditionVerified:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern: { source: [returnroute.workflow], detail-type: [ConditionVerified] }
+            DeadLetterConfig: { Arn: !GetAtt WorkflowDLQ.Arn }
+            RetryPolicy: { MaximumRetryAttempts: 3 }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/recommend-route.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true, External: ["pg-native"] }
+
+  ApproveRouteFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: approve-route.handler
+      Policies:
+        - !Ref DbSecretReadPolicy
+        - EventBridgePutEventsPolicy: { EventBusName: !Ref EventBus }
+      Events:
+        Decide:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StaffApi
+            Path: /returns/{id}/decision
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/approve-route.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true, External: ["pg-native"] }
+
+  CreateWarehouseTaskFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: create-warehouse-task.handler
+      Policies: [!Ref DbSecretReadPolicy]
+      Events:
+        RouteApproved:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref EventBus
+            Pattern: { source: [returnroute.workflow], detail-type: [RouteApproved] }
+            DeadLetterConfig: { Arn: !GetAtt WorkflowDLQ.Arn }
+            RetryPolicy: { MaximumRetryAttempts: 3 }
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/create-warehouse-task.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true, External: ["pg-native"] }
+
+  PresignUploadFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../web
+      Handler: presign-upload.handler
+      Policies:
+        - S3WritePolicy: { BucketName: !Ref MediaBucket }
+        - Statement: [{ Effect: Allow, Action: [kms:GenerateDataKey, kms:Encrypt], Resource: !GetAtt MediaKey.Arn }]
+      Events:
+        Upload:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref StaffApi
+            Path: /uploads
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties: { EntryPoints: [src/lambdas/presign-upload.ts], Format: esm, OutExtension: [.js=.mjs], Target: es2022, Sourcemap: true }
+
+  # ── API & IAM ──────────────────────────────────────────────────────────────
+  StaffApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      CorsConfiguration:
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowMethods: [POST]
+        AllowHeaders: [authorization, content-type]
+      Auth:
+        DefaultAuthorizer: StaffJwt
+        Authorizers:
+          StaffJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Ref CognitoIssuerUrl
+              audience: [!Ref CognitoAudience]
+
+  BedrockInvokePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            # Verify the exact action set for the Bedrock Mantle (Messages API) endpoint in your region before deploying.
+            Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+            Resource: "*"
+
+  DbSecretReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: [secretsmanager:GetSecretValue]
+            Resource: !GetAtt Database.MasterUserSecret.SecretArn
+
+Outputs:
+  MediaBucketName:
+    Value: !Ref MediaBucket
+  StaffApiUrl:
+    Value: !Sub "https://${StaffApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  EventBusName:
+    Value: !Ref EventBus
