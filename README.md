@@ -54,3 +54,16 @@ psql "$DATABASE_URL" -f ../db/seed.sql   # fictional data, dev only
 ```
 
 See `docs/ARCHITECTURE.md` for the required VPC endpoints and the Cognito authoriser. The template passes `cfn-lint`, but it has not been deployed.
+
+## Launch readiness (glow-up)
+
+- Home page (`web/`): problem section with three sourced statistics, what-we-solve, comparison table, AI section, team (founder cards), roadmap and FAQ, with scroll-reveal motion that respects reduced motion. Sections live in `web/src/components/Glow.tsx` (generated markup), styles in `web/src/app/glow.css`, motion in `web/public/glow.js`.
+- New routes: `/privacy`, `/terms` (review drafts); new `sitemap.ts` and `robots.ts`; `metadataBase` set to returnroute.site. Footer credits the founders.
+- Ship assets: `opengraph-image.png`, `twitter-image.png`, `apple-icon.png`, `public/manifest.webmanifest`, icons, founders JSON-LD.
+- Dashboard: fixed a small top-bar overflow on phones.
+
+### Content to confirm before launch
+- **Founders are placeholders:** Kelechi Obi (Founder/CEO) and Halima Bello (Co-founder/CTO) — replace in `web/src/components/Glow.tsx`, the footer in `web/src/components/site/chrome.tsx` and the JSON-LD in `web/src/app/layout.tsx`.
+- Contact email `hello@returnroute.site` is a placeholder — create the forward or replace it.
+- Statistics (NRF & Happy Returns 2024) — re-check figures and links.
+- Privacy notice and terms need operator details and governing law.

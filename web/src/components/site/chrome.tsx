@@ -2,9 +2,11 @@ import Link from "next/link";
 import { Logo } from "../ui";
 
 const NAV = [
+  { href: "/#problem", label: "Problem" },
   { href: "/#demo", label: "Demo" },
   { href: "/use-cases", label: "Use cases" },
   { href: "/pricing", label: "Pricing" },
+  { href: "/#team", label: "Team" },
   { href: "/app", label: "Open dashboard" },
 ];
 
@@ -54,7 +56,7 @@ export function SiteFooter() {
           integrations are simulated. AI outputs are advisory and never authorise refunds, disposal or inventory adjustments.
         </div>
       </div>
-      <div className="border-t border-navy-800 py-4 text-center text-xs">© 2026 ReturnRoute (demonstration product)</div>
+      <div className="border-t border-navy-800 px-4 py-4 text-center text-xs">© 2026 ReturnRoute (demonstration product) · Founded by Kelechi Obi (Founder/CEO) &amp; Halima Bello (Co-founder/CTO) · <Link href="/privacy" className="hover:text-white">Privacy</Link> · <Link href="/terms" className="hover:text-white">Terms</Link></div>
     </footer>
   );
 }

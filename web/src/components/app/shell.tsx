@@ -56,9 +56,9 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
       <span className="inline-flex items-center gap-1 rounded-full bg-signal-100 px-2.5 py-1 text-xs font-medium text-signal-700">
         <FlaskConical className="h-3.5 w-3.5" /> Demo<span className="hidden sm:inline"> · fictional data · simulated WMS</span>
       </span>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 items-center gap-2">
         <label className="hidden text-xs text-slate-500 sm:block" htmlFor="user">Signed in as</label>
-        <select id="user" className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" value={state?.user.name ?? ""}
+        <select id="user" className="min-w-0 max-w-[11rem] rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm sm:max-w-none" value={state?.user.name ?? ""}
           onChange={(e) => { const u = DEMO_USERS.find((x) => x.name === e.target.value); if (u) setUser(u); }}>
           {DEMO_USERS.map((u) => <option key={u.name} value={u.name}>{u.name} · {u.role}</option>)}
         </select>

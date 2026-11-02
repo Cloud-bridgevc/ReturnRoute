@@ -3,6 +3,7 @@ import {
   ArrowRight, BarChart3, ClipboardList, Cpu, Eye, PackageCheck, Recycle, Scale, Search, ShieldCheck, Sparkles, Tags, Wrench,
 } from "lucide-react";
 import { RoutingDemo } from "@/components/site/routing-demo";
+import { GlowTop, GlowMid, GlowEnd } from "@/components/Glow";
 
 const ROUTES = [
   { icon: PackageCheck, t: "Restock", d: "Sealed, complete items back to A-stock at full price.", c: "#34d399" },
@@ -92,6 +93,8 @@ export default function Home() {
         </div>
       </section>
 
+      <GlowTop />
+
       <section id="demo" className="scroll-mt-20 bg-navy-900 px-4 py-20">
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 max-w-2xl">
@@ -130,6 +133,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <GlowMid />
 
       <section className="bg-slate-50 px-4 py-20">
         <div className="mx-auto max-w-6xl">
@@ -173,6 +178,8 @@ export default function Home() {
           </ul>
         </div>
       </section>
+
+      <GlowEnd />
 
       <section className="px-4 pb-20">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 rounded-2xl bg-navy-900 px-8 py-10 text-white sm:flex-row sm:items-center">
