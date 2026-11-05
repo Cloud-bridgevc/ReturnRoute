@@ -63,7 +63,7 @@ See `docs/ARCHITECTURE.md` for the required VPC endpoints and the Cognito author
 - Dashboard: fixed a small top-bar overflow on phones.
 
 ### Content to confirm before launch
-- **Founders are placeholders:** Kelechi Obi (Founder/CEO) and Halima Bello (Co-founder/CTO) — replace in `web/src/components/Glow.tsx`, the footer in `web/src/components/site/chrome.tsx` and the JSON-LD in `web/src/app/layout.tsx`.
+- **Founders:** Ademide Daniel (Founder/CEO, confirmed) and Halima Bello (Co-founder/CTO, still a placeholder) — edit in `web/src/components/Glow.tsx`, the footer in `web/src/components/site/chrome.tsx` and the JSON-LD in `web/src/app/layout.tsx`.
 - Contact email `hello@returnroute.site` is a placeholder — create the forward or replace it.
 - Statistics (NRF & Happy Returns 2024) — re-check figures and links.
 - Privacy notice and terms need operator details and governing law.

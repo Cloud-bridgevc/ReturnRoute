@@ -22,7 +22,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans">
         <Script src="/glow.js" strategy="afterInteractive" />
-        <script type="application/ld+json" id="founders-ld" dangerouslySetInnerHTML={{ __html: "{\"@context\": \"https://schema.org\", \"@type\": \"Organization\", \"name\": \"ReturnRoute\", \"url\": \"https://returnroute.site\", \"email\": \"hello@returnroute.site\", \"logo\": \"https://returnroute.site/icon-512.png\", \"founder\": [{\"@type\": \"Person\", \"name\": \"Kelechi Obi\", \"jobTitle\": \"Founder/CEO\"}, {\"@type\": \"Person\", \"name\": \"Halima Bello\", \"jobTitle\": \"Co-founder/CTO\"}]}" }} />{children}</body>
+        <script type="application/ld+json" id="founders-ld" dangerouslySetInnerHTML={{ __html: "{\"@context\": \"https://schema.org\", \"@type\": \"Organization\", \"name\": \"ReturnRoute\", \"url\": \"https://returnroute.site\", \"email\": \"hello@returnroute.site\", \"logo\": \"https://returnroute.site/icon-512.png\", \"founder\": [{\"@type\": \"Person\", \"name\": \"Ademide Daniel\", \"jobTitle\": \"Founder/CEO\"}, {\"@type\": \"Person\", \"name\": \"Halima Bello\", \"jobTitle\": \"Co-founder/CTO\"}]}" }} />{children}</body>
     </html>
   );
 }
